@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>주누디자인 LAN-Link | 초고속 폴더·파일 웹 전송</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#0f172a" />
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #273449;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #0ea5e9;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Pretendard", "Malgun Gothic", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: #111c33;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .brand-badge {
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      color: #fff;
+      padding: 4px 9px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 7px 13px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: 0.15s;
+    }
+    button:hover { border-color: var(--accent); background: #2e3f59; }
+    button.primary {
+      background: var(--accent-2);
+      border-color: var(--accent-2);
+      color: #fff;
+    }
+    button.primary:hover { background: #0284c7; }
+    button.ok {
+      background: rgba(34, 197, 94, 0.18);
+      border-color: var(--ok);
+      color: #4ade80;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 290px 1fr;
+      flex: 1;
+      min-height: 0;
+    }
+    aside {
+      border-right: 1px solid var(--border);
+      background: #141f35;
+      display: flex;
+      flex-direction: column;
+    }
+    .side-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .side-title {
+      font-size: 11px;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .my-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 12px;
+    }
+    .my-name-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .my-name { font-weight: 800; font-size: 16px; color: var(--accent); }
+    .status-pill {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 99px;
+      background: rgba(245, 158, 11, 0.18);
+      color: var(--warn);
+    }
+    .status-pill.online { background: rgba(34, 197, 94, 0.18); color: #4ade80; }
+    .preset-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .preset-grid button { padding: 5px 0; font-size: 12px; }
+    .preset-grid button.active {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.2);
+      color: #fff;
+    }
+
+    .peers-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .peer-card {
+      background: var(--panel);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 12px;
+      cursor: pointer;
+      transition: 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .peer-card.offline { opacity: 0.5; cursor: not-allowed; }
+    .peer-card:not(.offline):hover { border-color: #64748b; }
+    .peer-card.selected {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.13);
+    }
+    .peer-name { font-weight: 700; font-size: 14px; }
+    .peer-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #475569;
+      flex-shrink: 0;
+    }
+    .dot.online { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+
+    main {
+      padding: 18px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+    .target-banner {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .target-banner strong { color: var(--accent); }
+
+    .dropzone {
+      border: 2px dashed #475569;
+      background: rgba(30, 41, 59, 0.55);
+      border-radius: 14px;
+      padding: 26px 18px;
+      text-align: center;
+      transition: 0.15s;
+    }
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.1);
+    }
+    .drop-title { font-size: 15.5px; font-weight: 700; margin-bottom: 6px; }
+    .drop-sub { font-size: 12.5px; color: var(--muted); margin-bottom: 15px; }
+    .drop-btns { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+
+    .progress-box {
+      display: none;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .progress-box.active { display: block; }
+    .progress-top { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 8px; }
+    .bar-bg { width: 100%; height: 8px; background: #0f172a; border-radius: 99px; overflow: hidden; }
+    .bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #38bdf8, #22c55e); transition: width 0.1s linear; }
+
+    .text-send { display: flex; gap: 8px; }
+    .text-send input {
+      flex: 1;
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 9px;
+      font-size: 13.5px;
+    }
+    .text-send input:focus { outline: none; border-color: var(--accent); }
+
+    .history-panel {
+      flex: 1;
+      min-height: 200px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .history-head {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .hist-item {
+      background: #172236;
+      border: 1px solid #2a3952;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .hist-meta { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+    .hist-main { word-break: break-all; }
+    .badge-dir {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 5px;
+      font-size: 10.5px;
+      font-weight: 700;
+      margin-right: 5px;
+    }
+    .badge-in { background: rgba(34, 197, 94, 0.18); color: #4ade80; }
+    .badge-out { background: rgba(56, 189, 248, 0.18); color: #38bdf8; }
+
+    /* 토스트 팝업 */
+    .toast-wrap {
+      position: fixed;
+      top: 64px;
+      right: 18px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 360px;
+      width: calc(100vw - 36px);
+      pointer-events: none;
+    }
+    .toast-card {
+      pointer-events: auto;
+      background: #172542;
+      border: 1.5px solid var(--accent);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+      border-radius: 12px;
+      padding: 12px 14px;
+      animation: slideIn 0.2s ease-out;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .toast-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+    .toast-body { font-size: 13px; word-break: break-all; margin-bottom: 9px; line-height: 1.45; }
+    .toast-actions { display: flex; justify-content: flex-end; gap: 6px; }
+    .toast-actions button { padding: 4px 10px; font-size: 12px; }
+
+    /* 모달 */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.78);
+      align-items: center;
+      justify-content: center;
+      z-index: 120;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      width: 460px;
+      max-width: 92vw;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+    }
+    .modal h3 { font-size: 17px; margin-bottom: 12px; }
+    .modal p, .modal li { font-size: 13px; color: #cbd5e1; line-height: 1.6; }
+    .modal ul { padding-left: 18px; margin: 10px 0 16px; }
+    .pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+    .pick-grid button { padding: 14px; font-size: 15px; }
+
+    @media (max-width: 780px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="brand-badge">LAN-Link Web</span>
+      <span>주누디자인 사내 폴더·파일·메시지 전송</span>
+    </div>
+    <div class="header-actions">
+      <button id="notifBtn" onclick="enableAlerts()">🔔 알림 허용</button>
+      <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer; background:var(--panel-2); border:1px solid var(--border); padding:6px 10px; border-radius:8px;">
+        <input type="checkbox" id="autoDownloadChk" onchange="savePrefs()" />
+        <span>단일 파일 자동 저장</span>
+      </label>
+      <button onclick="openHelp()">❓ 사용법</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <div class="side-section">
+        <div class="side-title">내 컴퓨터 선택 (전환 가능)</div>
+        <div class="my-card">
+          <div class="my-name-row">
+            <span class="my-name" id="myName">선택 필요</span>
+            <span class="status-pill" id="myStatus">연결 중...</span>
+          </div>
+          <div class="preset-grid" id="myPresets"></div>
+        </div>
+      </div>
+
+      <div class="side-section" style="border-bottom:none; padding-bottom:4px;">
+        <div class="side-title">
+          <span>사내 PC 목록</span>
+          <button style="padding:2px 8px; font-size:11px;" onclick="probeAllPeers()">🔄 새로고침</button>
+        </div>
+      </div>
+
+      <div class="peers-wrap" id="peersList"></div>
+    </aside>
+
+    <main>
+      <div class="target-banner">
+        <div>받는 PC: <strong id="targetLabel">왼쪽에서 온라인(초록불) PC를 선택하세요</strong></div>
+        <div style="font-size:11.5px; color:var(--muted);">브라우저 직통 P2P · 서버 저장 없음</div>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <div class="drop-title">파일이나 폴더를 통째로 여기에 끌어다 놓으세요</div>
+        <div class="drop-sub">폴더 구조 그대로 상대방 화면에 전송됩니다 (설치·방화벽 설정 불필요)</div>
+        <div class="drop-btns">
+          <button class="primary" onclick="document.getElementById('fileInput').click()">📄 파일 선택</button>
+          <button class="primary" onclick="document.getElementById('folderInput').click()">📂 폴더 통째로 선택</button>
+        </div>
+        <input type="file" id="fileInput" multiple hidden />
+        <input type="file" id="folderInput" webkitdirectory directory multiple hidden />
+      </div>
+
+      <div class="progress-box" id="progressBox">
+        <div class="progress-top">
+          <span id="progressText">준비 중...</span>
+          <span id="progressSpeed">0 MB/s</span>
+        </div>
+        <div class="bar-bg"><div class="bar-fill" id="progressBar"></div></div>
+      </div>
+
+      <div class="text-send">
+        <input type="text" id="textInput" placeholder="상대 PC로 보낼 텍스트·URL을 입력하세요 (Enter로 즉시 전송)" onkeydown="if(event.key==='Enter') sendText()" />
+        <button class="primary" onclick="sendText()">메시지 전송</button>
+      </div>
+
+      <div class="history-panel">
+        <div class="history-head">
+          <span>송수신 내역</span>
+          <button style="padding:3px 9px; font-size:11.5px;" onclick="clearHistory()">비우기</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <!-- 최초 이름 선택 모달 -->
+  <div class="modal-backdrop" id="pickModal">
+    <div class="modal">
+      <h3>어느 컴퓨터에서 접속하셨나요?</h3>
+      <p>본인 이름을 한 번만 선택하시면 다음부터 자동으로 연결됩니다.</p>
+      <div class="pick-grid" id="pickGrid"></div>
+    </div>
+  </div>
+
+  <!-- 사용법 모달 -->
+  <div class="modal-backdrop" id="helpModal">
+    <div class="modal">
+      <h3>LAN-Link 웹 버전 사용법</h3>
+      <ul>
+        <li><b>즐겨찾기 등록</b>: 이 웹 주소를 각 컴퓨터(<code>전현수</code>, <code>이정민</code>, <code>이혜수</code>, <code>경리컴퓨터</code>)와 스마트폰 즐겨찾기에 넣어두고 탭을 열어두세요.</li>
+        <li><b>자동 인식</b>: 웹페이지를 열어둔 컴퓨터는 왼쪽 목록에 <b>초록불(온라인)</b>로 자동 표시됩니다.</li>
+        <li><b>폴더 통째로 전송</b>: 폴더를 점선 박스에 끌어다 놓거나 <b>폴더 통째로 선택</b>을 누르면, 받는 사람 화면에 <b>폴더 ZIP 묶음 다운로드</b> 버튼이 바로 뜹니다.</li>
+        <li><b>창 최소화 시 알림</b>: 상단 <b>🔔 알림 허용</b>을 한 번 눌러두시면 다른 작업 중에도 우측 하단 팝업과 알림음이 뜹니다.</li>
+      </ul>
+      <div style="text-align:right;">
+        <button class="primary" onclick="document.getElementById('helpModal').classList.remove('open')">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MEMBERS = [
+      { key: "전현수", peerId: "joonoo-lanlink-v2-hyunsoo" },
+      { key: "이정민", peerId: "joonoo-lanlink-v2-jungmin" },
+      { key: "이혜수", peerId: "joonoo-lanlink-v2-hyesu" },
+      { key: "경리컴퓨터", peerId: "joonoo-lanlink-v2-acct" }
+    ];
+    const CHUNK_SIZE = 64 * 1024; // 64 KB WebRTC 안전 청크
+    const BASE_TITLE = document.title;
+
+    let myKey = localStorage.getItem("lanlink_my_key") || "";
+    let autoDownload = localStorage.getItem("lanlink_auto_dl") === "true";
+    let peer = null;
+    let conns = {};       // peerId -> DataConnection
+    let onlineMap = {};   // peerId -> boolean
+    let selectedIds = new Set();
+    let historyItems = [];
+    let incomingBatches = {}; // batchId -> { sender, topLabel, fileCount, files: {}, receivedCount: 0 }
+    let titleBlinkTimer = null;
+
+    document.getElementById("autoDownloadChk").checked = autoDownload;
+
+    function savePrefs() {
+      autoDownload = document.getElementById("autoDownloadChk").checked;
+      localStorage.setItem("lanlink_auto_dl", String(autoDownload));
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    }
+
+    function fmtSize(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+      if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
+      return (bytes / 1024 / 1024 / 1024).toFixed(2) + " GB";
+    }
+
+    function playChime() {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx();
+        const now = ctx.currentTime;
+        [[880, 0, 0.1], [1175, 0.11, 0.2]].forEach(([freq, delay, dur]) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.15, now + delay);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + delay + dur);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + delay);
+          osc.stop(now + delay + dur);
+        });
+      } catch (e) {}
+    }
+
+    function updateNotifBtn() {
+      const btn = document.getElementById("notifBtn");
+      if (!("Notification" in window)) {
+        btn.style.display = "none";
+        return;
+      }
+      if (Notification.permission === "granted") {
+        btn.textContent = "🔔 알림 켜짐";
+        btn.className = "ok";
+      } else {
+        btn.textContent = "🔔 알림 허용";
+        btn.className = "";
+      }
+    }
+
+    function enableAlerts() {
+      playChime();
+      if ("Notification" in window && Notification.permission !== "granted") {
+        Notification.requestPermission().then(updateNotifBtn);
+      } else {
+        updateNotifBtn();
+      }
+    }
+
+    function blinkTitle(msg) {
+      if (!document.hidden) return;
+      clearInterval(titleBlinkTimer);
+      let flip = false;
+      titleBlinkTimer = setInterval(() => {
+        document.title = flip ? BASE_TITLE : `🔔 ${msg}`;
+        flip = !flip;
+      }, 800);
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        clearInterval(titleBlinkTimer);
+        document.title = BASE_TITLE;
+      }
+    });
+
+    function showToast(title, body, actionHtml) {
+      playChime();
+      blinkTitle(title);
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          const n = new Notification(title, { body });
+          n.onclick = () => { window.focus(); n.close(); };
+        } catch (e) {}
+      }
+      const wrap = document.getElementById("toastWrap");
+      const card = document.createElement("div");
+      card.className = "toast-card";
+      card.innerHTML = `
+        <div class="toast-head"><span>${escapeHtml(title)}</span></div>
+        <div class="toast-body">${escapeHtml(body)}</div>
+        <div class="toast-actions">
+          ${actionHtml || ""}
+          <button onclick="this.closest('.toast-card').remove()">닫기</button>
+        </div>
+      `;
+      wrap.prepend(card);
+      while (wrap.children.length > 4) wrap.lastChild.remove();
+      setTimeout(() => card.remove(), 10000);
+    }
+
+    function renderMyPresets() {
+      const box = document.getElementById("myPresets");
+      box.innerHTML = MEMBERS.map(m =>
+        `<button class="${m.key === myKey ? "active" : ""}" onclick="selectMyName('${m.key}')">${m.key}</button>`
+      ).join("");
+      const pick = document.getElementById("pickGrid");
+      pick.innerHTML = MEMBERS.map(m =>
+        `<button class="primary" onclick="selectMyName('${m.key}')">${m.key}</button>`
+      ).join("");
+    }
+
+    function selectMyName(key) {
+      if (key === myKey && peer && !peer.destroyed) return;
+      myKey = key;
+      localStorage.setItem("lanlink_my_key", key);
+      document.getElementById("pickModal").classList.remove("open");
+      document.getElementById("myName").textContent = key;
+      renderMyPresets();
+      initPeer();
+    }
+
+    function setMyStatus(text, online) {
+      const el = document.getElementById("myStatus");
+      el.textContent = text;
+      el.className = "status-pill" + (online ? " online" : "");
+    }
+
+    function initPeer() {
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+      }
+      conns = {};
+      onlineMap = {};
+      selectedIds.clear();
+      renderPeers();
+
+      const me = MEMBERS.find(m => m.key === myKey);
+      if (!me) return;
+      setMyStatus("연결 중...", false);
+
+      peer = new Peer(me.peerId, {
+        debug: 0,
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" }
+          ]
+        }
+      });
+
+      peer.on("open", () => {
+        setMyStatus("온라인", true);
+        probeAllPeers();
+      });
+
+      peer.on("connection", conn => {
+        setupConnection(conn);
+      });
+
+      peer.on("error", err => {
+        if (err.type === "unavailable-id") {
+          setMyStatus("중복 접속됨", false);
+          alert(`이미 다른 창/PC에서 '${myKey}' 이름으로 접속 중입니다.\n다른 창을 닫거나 본인 이름을 확인해 주세요.`);
+        } else if (err.type === "peer-unavailable") {
+          // 상대방 오프라인 상태는 정상
+        } else if (err.type === "network" || err.type === "disconnected") {
+          setMyStatus("재연결 중...", false);
+          setTimeout(() => { if (peer && peer.disconnected) peer.reconnect(); }, 2000);
+        }
+      });
+    }
+
+    function setupConnection(conn) {
+      conn.on("open", () => {
+        conns[conn.peer] = conn;
+        onlineMap[conn.peer] = true;
+        renderPeers();
+      });
+
+      conn.on("data", data => handleIncomingData(conn.peer, data));
+
+      conn.on("close", () => {
+        if (conns[conn.peer] === conn) delete conns[conn.peer];
+        onlineMap[conn.peer] = false;
+        renderPeers();
+      });
+
+      conn.on("error", () => {
+        if (conns[conn.peer] === conn) delete conns[conn.peer];
+        onlineMap[conn.peer] = false;
+        renderPeers();
+      });
+    }
+
+    function probeAllPeers() {
+      if (!peer || !peer.open) return;
+      for (const m of MEMBERS) {
+        if (m.key === myKey) continue;
+        const existing = conns[m.peerId];
+        if (existing && existing.open) {
+          onlineMap[m.peerId] = true;
+          continue;
+        }
+        const conn = peer.connect(m.peerId, { reliable: true });
+        setupConnection(conn);
+      }
+    }
+
+    function renderPeers() {
+      const wrap = document.getElementById("peersList");
+      const others = MEMBERS.filter(m => m.key !== myKey);
+      const onlineOthers = others.filter(m => onlineMap[m.peerId]);
+
+      if (onlineOthers.length === 1 && selectedIds.size === 0) {
+        selectedIds.add(onlineOthers[0].peerId);
+      }
+      for (const id of [...selectedIds]) {
+        if (!onlineMap[id]) selectedIds.delete(id);
+      }
+
+      wrap.innerHTML = others.map(m => {
+        const isOn = !!onlineMap[m.peerId];
+        const isSel = selectedIds.has(m.peerId);
+        return `
+          <div class="peer-card ${isOn ? "" : "offline"} ${isSel ? "selected" : ""}" onclick="togglePeer('${m.peerId}')">
+            <div>
+              <div class="peer-name">${m.key}</div>
+              <div class="peer-sub">${isOn ? "접속 중 (전송 가능)" : "오프라인"}</div>
+            </div>
+            <div class="dot ${isOn ? "online" : ""}"></div>
+          </div>
+        `;
+      }).join("");
+
+      const names = others.filter(m => selectedIds.has(m.peerId)).map(m => m.key);
+      document.getElementById("targetLabel").textContent =
+        names.length > 0 ? names.join(", ") : "왼쪽에서 온라인(초록불) PC를 선택하세요";
+    }
+
+    function togglePeer(peerId) {
+      if (!onlineMap[peerId]) return;
+      if (selectedIds.has(peerId)) selectedIds.delete(peerId);
+      else selectedIds.add(peerId);
+      renderPeers();
+    }
+
+    function addHistory(item) {
+      historyItems.unshift(item);
+      if (historyItems.length > 60) historyItems.pop();
+      renderHistory();
+    }
+
+    function clearHistory() {
+      historyItems = [];
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const list = document.getElementById("historyList");
+      if (historyItems.length === 0) {
+        list.innerHTML = `<div style="color:var(--muted); text-align:center; padding:32px; font-size:12.5px;">아직 송수신 내역이 없습니다.</div>`;
+        return;
+      }
+      list.innerHTML = historyItems.map((it, idx) => {
+        const isOut = it.direction === "out";
+        const badge = isOut
+          ? `<span class="badge-dir badge-out">보냄 → ${escapeHtml(it.target)}</span>`
+          : `<span class="badge-dir badge-in">받음 ← ${escapeHtml(it.sender)}</span>`;
+        if (it.kind === "text") {
+          return `
+            <div class="hist-item">
+              <div>
+                <div class="hist-meta">${badge} · ${it.time}</div>
+                <div class="hist-main">${escapeHtml(it.text)}</div>
+              </div>
+              <button onclick="copyText(${JSON.stringify(it.text)}, this)">복사</button>
+            </div>
+          `;
+        }
+        let actionBtn = "";
+        if (!isOut) {
+          actionBtn = it.isFolder
+            ? `<button class="primary" onclick="downloadBatchZip('${it.batchId}')">📦 폴더 ZIP 저장</button>`
+            : `<button class="primary" onclick="downloadSingle('${it.batchId}')">💾 다운로드</button>`;
+        }
+        return `
+          <div class="hist-item">
+            <div>
+              <div class="hist-meta">${badge} · ${it.time} · ${fmtSize(it.size)}</div>
+              <div class="hist-main">${it.isFolder ? "📂" : "📄"} ${escapeHtml(it.label)}</div>
+            </div>
+            ${actionBtn}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function copyText(txt, btn) {
+      navigator.clipboard?.writeText(txt);
+      if (btn) {
+        const old = btn.textContent;
+        btn.textContent = "복사됨!";
+        setTimeout(() => btn.textContent = old, 1200);
+      }
+    }
+
+    // 수신 데이터 처리
+    const batchStore = {}; // batchId -> { topLabel, files: [{ relPath, blob }] }
+
+    function handleIncomingData(fromPeerId, data) {
+      if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+        // 바이너리 청크는 현재 활성 파일에 추가
+        const active = incomingBatches[fromPeerId + "_active"];
+        if (!active) return;
+        const buf = data instanceof ArrayBuffer ? data : data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+        active.chunks.push(buf);
+        return;
+      }
+
+      if (!data || typeof data !== "object") return;
+
+      if (data.type === "text") {
+        const time = new Date().toTimeString().slice(0, 8);
+        addHistory({ kind: "text", direction: "in", sender: data.sender, text: data.text, time });
+        showToast(
+          `💬 새 메시지 (${data.sender})`,
+          data.text,
+          `<button class="primary" onclick='copyText(${JSON.stringify(data.text)}, this)'>복사</button>`
+        );
+        return;
+      }
+
+      if (data.type === "batch-start") {
+        incomingBatches[data.batchId] = {
+          sender: data.sender,
+          topLabel: data.topLabel,
+          fileCount: data.fileCount,
+          totalSize: data.totalSize,
+          isFolder: data.isFolder,
+          files: []
+        };
+        return;
+      }
+
+      if (data.type === "file-meta") {
+        incomingBatches[fromPeerId + "_active"] = {
+          batchId: data.batchId,
+          relPath: data.relPath,
+          mime: data.mime || "application/octet-stream",
+          chunks: []
+        };
+        return;
+      }
+
+      if (data.type === "file-end") {
+        const active = incomingBatches[fromPeerId + "_active"];
+        delete incomingBatches[fromPeerId + "_active"];
+        if (!active) return;
+        const batch = incomingBatches[active.batchId];
+        if (!batch) return;
+        const blob = new Blob(active.chunks, { type: active.mime });
+        batch.files.push({ relPath: active.relPath, blob });
+        return;
+      }
+
+      if (data.type === "batch-end") {
+        const batch = incomingBatches[data.batchId];
+        delete incomingBatches[data.batchId];
+        if (!batch) return;
+        batchStore[data.batchId] = batch;
+        const time = new Date().toTimeString().slice(0, 8);
+        addHistory({
+          kind: "file",
+          direction: "in",
+          sender: batch.sender,
+          batchId: data.batchId,
+          isFolder: batch.isFolder,
+          label: batch.topLabel,
+          size: batch.totalSize,
+          time
+        });
+
+        if (!batch.isFolder && batch.files.length === 1 && autoDownload) {
+          downloadSingle(data.batchId);
+        }
+
+        const btnHtml = batch.isFolder
+          ? `<button class="primary" onclick="downloadBatchZip('${data.batchId}')">📦 폴더 ZIP 저장</button>`
+          : `<button class="primary" onclick="downloadSingle('${data.batchId}')">💾 다운로드</button>`;
+        showToast(`📥 ${batch.isFolder ? "폴더" : "파일"} 수신 (${batch.sender})`, `${batch.topLabel} (${fmtSize(batch.totalSize)})`, btnHtml);
+      }
+    }
+
+    function triggerDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    function downloadSingle(batchId) {
+      const b = batchStore[batchId];
+      if (!b || !b.files[0]) return;
+      const name = b.files[0].relPath.split("/").pop();
+      triggerDownload(b.files[0].blob, name);
+    }
+
+    async function downloadBatchZip(batchId) {
+      const b = batchStore[batchId];
+      if (!b) return;
+      const zip = new JSZip();
+      for (const f of b.files) {
+        zip.file(f.relPath, f.blob);
+      }
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const folderName = b.files[0]?.relPath.split("/")[0] || "LAN-Link_폴더";
+      triggerDownload(zipBlob, `${folderName}.zip`);
+    }
+
+    // 송신
+    function sendText() {
+      const targets = [...selectedIds].map(id => conns[id]).filter(c => c && c.open);
+      if (targets.length === 0) return alert("먼저 왼쪽에서 온라인(초록불) PC를 선택하세요.");
+      const inp = document.getElementById("textInput");
+      const text = inp.value.trim();
+      if (!text) return;
+
+      const time = new Date().toTimeString().slice(0, 8);
+      for (const conn of targets) {
+        conn.send({ type: "text", sender: myKey, text });
+        const name = MEMBERS.find(m => m.peerId === conn.peer)?.key || conn.peer;
+        addHistory({ kind: "text", direction: "out", target: name, text, time });
+      }
+      inp.value = "";
+    }
+
+    async function collectDroppedFiles(dataTransfer) {
+      const files = [];
+      const entries = [];
+      for (const item of dataTransfer.items) {
+        if (item.webkitGetAsEntry) {
+          const entry = item.webkitGetAsEntry();
+          if (entry) entries.push(entry);
+        } else if (item.kind === "file") {
+          const f = item.getAsFile();
+          if (f) files.push({ file: f, relPath: f.name });
+        }
+      }
+      async function walk(entry, prefix) {
+        if (entry.isFile) {
+          const file = await new Promise((res, rej) => entry.file(res, rej));
+          files.push({ file, relPath: prefix ? `${prefix}/${file.name}` : file.name });
+        } else if (entry.isDirectory) {
+          const reader = entry.createReader();
+          const readBatch = () => new Promise((res, rej) => reader.readEntries(res, rej));
+          let batch;
+          const next = prefix ? `${prefix}/${entry.name}` : entry.name;
+          do {
+            batch = await readBatch();
+            for (const c of batch) await walk(c, next);
+          } while (batch.length > 0);
+        }
+      }
+      for (const e of entries) await walk(e, "");
+      return files;
+    }
+
+    async function sendChunkedFile(conn, fileObj, relPath, batchId, onChunkSent) {
+      conn.send({
+        type: "file-meta",
+        batchId,
+        relPath,
+        size: fileObj.size,
+        mime: fileObj.type
+      });
+
+      const dc = conn.dataChannel;
+      let offset = 0;
+      while (offset < fileObj.size) {
+        if (dc && dc.bufferedAmount > 4 * 1024 * 1024) {
+          await new Promise(r => setTimeout(r, 20));
+          continue;
+        }
+        const slice = fileObj.slice(offset, offset + CHUNK_SIZE);
+        const buf = await slice.arrayBuffer();
+        conn.send(buf);
+        offset += buf.byteLength;
+        onChunkSent(buf.byteLength);
+      }
+      conn.send({ type: "file-end", batchId });
+    }
+
+    async function sendFiles(items) {
+      const targets = [...selectedIds].map(id => conns[id]).filter(c => c && c.open);
+      if (targets.length === 0) return alert("먼저 왼쪽에서 온라인(초록불) PC를 선택하세요.");
+      if (!items || items.length === 0) return;
+
+      const box = document.getElementById("progressBox");
+      const pText = document.getElementById("progressText");
+      const pSpeed = document.getElementById("progressSpeed");
+      const pBar = document.getElementById("progressBar");
+      box.classList.add("active");
+
+      const totalSize = items.reduce((a, b) => a + b.file.size, 0);
+      const grandTotal = totalSize * targets.length;
+      let sentBytes = 0;
+      const t0 = performance.now();
+      const isFolder = items.length > 1 || items[0].relPath.includes("/");
+      const topLabel = items.length > 1
+        ? `${items[0].relPath.split("/")[0]} (${items.length}개 파일)`
+        : items[0].relPath;
+
+      for (const conn of targets) {
+        const batchId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        conn.send({
+          type: "batch-start",
+          batchId,
+          sender: myKey,
+          fileCount: items.length,
+          totalSize,
+          isFolder,
+          topLabel
+        });
+
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          await sendChunkedFile(conn, it.file, it.relPath, batchId, chunkLen => {
+            sentBytes += chunkLen;
+            const pct = grandTotal > 0 ? Math.min(100, Math.round((sentBytes / grandTotal) * 100)) : 100;
+            const elapsed = Math.max(0.1, (performance.now() - t0) / 1000);
+            const mbps = (sentBytes / 1024 / 1024 / elapsed).toFixed(1);
+            pBar.style.width = pct + "%";
+            pText.textContent = `전송 중 (${i + 1}/${items.length}) · ${pct}%`;
+            pSpeed.textContent = `${mbps} MB/s`;
+          });
+        }
+        conn.send({ type: "batch-end", batchId });
+
+        const targetName = MEMBERS.find(m => m.peerId === conn.peer)?.key || conn.peer;
+        addHistory({
+          kind: "file",
+          direction: "out",
+          target: targetName,
+          isFolder,
+          label: topLabel,
+          size: totalSize,
+          time: new Date().toTimeString().slice(0, 8)
+        });
+      }
+
+      pText.textContent = "전송 완료!";
+      setTimeout(() => box.classList.remove("active"), 2500);
+    }
+
+    // 드래그 & 드롭
+    const dz = document.getElementById("dropzone");
+    dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("dragover"); });
+    dz.addEventListener("dragleave", () => dz.classList.remove("dragover"));
+    dz.addEventListener("drop", async e => {
+      e.preventDefault();
+      dz.classList.remove("dragover");
+      const files = await collectDroppedFiles(e.dataTransfer);
+      sendFiles(files);
+    });
+
+    document.getElementById("fileInput").addEventListener("change", e => {
+      const files = [...e.target.files].map(f => ({ file: f, relPath: f.name }));
+      e.target.value = "";
+      sendFiles(files);
+    });
+    document.getElementById("folderInput").addEventListener("change", e => {
+      const files = [...e.target.files].map(f => ({ file: f, relPath: f.webkitRelativePath || f.name }));
+      e.target.value = "";
+      sendFiles(files);
+    });
+
+    function openHelp() {
+      document.getElementById("helpModal").classList.add("open");
+    }
+
+    // 시작
+    updateNotifBtn();
+    renderMyPresets();
+    renderPeers();
+    renderHistory();
+
+    if (!myKey || !MEMBERS.some(m => m.key === myKey)) {
+      document.getElementById("pickModal").classList.add("open");
+    } else {
+      document.getElementById("myName").textContent = myKey;
+      initPeer();
+    }
+    setInterval(probeAllPeers, 5000);
+  </script>
+</body>
+</html>
