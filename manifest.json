@@ -1,16 +1,21 @@
 {
+  "id": "./",
   "name": "주누디자인 LAN-Link",
   "short_name": "LAN-Link",
-  "description": "설치 없이 브라우저로 폴더·파일·메시지를 주고받는 사내 초고속 전송 웹앱",
+  "description": "설치 없이 브라우저로 폴더·파일·메시지를 주고받는 사내 초고속 보안 전송 웹앱 (v3.0)",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
+  "categories": ["productivity", "utilities"],
   "icons": [
     {
       "src": "icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }
