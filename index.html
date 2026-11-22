@@ -1072,7 +1072,15 @@
     }
 
     const myTabId = randomId(10);
+    const urlMeParam = (new URLSearchParams(location.search).get("me") || hashParams.me || "").trim();
     let myKey = localStorage.getItem("lanlink_my_key") || "";
+    if (!myKey && urlMeParam) {
+      const matched = MEMBERS.find(m => m.id === urlMeParam || m.key === urlMeParam);
+      if (matched) {
+        myKey = matched.key;
+        localStorage.setItem("lanlink_my_key", myKey);
+      }
+    }
     let myMember = MEMBERS.find(m => m.key === myKey) || null;
     let autoDownload = localStorage.getItem("lanlink_auto_dl") === "true";
 
